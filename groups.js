@@ -62,12 +62,9 @@ module.exports = function(group_id) {
     var score = Date.now();
     redis_client.zadd(group_key('messages'), score, JSON.stringify(metadata));
     publish_to_group({ messages: [ metadata ] });
-    if (metadata.apn_alert) {
-      send_push({ alert: metadata.apn_alert });
-    }
   };
 
-  function send_push(notification) {
+  self.push = function(notification) {
     return get_all_members(function(err, members) {
       if (err) {
         console.error('cannot get members to send push:', err);
@@ -77,7 +74,7 @@ module.exports = function(group_id) {
       members.forEach(function(user_key) {
         apn.send_push(user_key, notification);
       });
-    })
+    });
   }
 
   self.join = function(user_key, callback) {

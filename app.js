@@ -68,6 +68,11 @@ app.ws('/subscribe', function(ws, req, res) {
       group.message(message_metadata);
     }
 
+    var push = message.push;
+    if (push) {
+      group.push(message.push);
+    }
+
     var join = message.join;
     if (join) {
       group.join(join);
