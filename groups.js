@@ -10,6 +10,7 @@ module.exports = function(group_id) {
   groups[group_id] = self;
 
   var counters = {};
+  var messages = [];
 
   self.increment = function(key, increment) {
     var current_value = counters[key];
@@ -20,13 +21,21 @@ module.exports = function(group_id) {
     counters[key] = current_value;
 
     // notify all subscribers
-    var update = {};
-    update[key] = current_value;
-    self.emit('update', update);
+    var counter_update = {};
+    counter_update[key] = current_value;
+    self.emit('update', { counters: counter_update });
+  };
+
+  self.message = function(metadata) {
+    messages.push(metadata);
+    self.emit('update', { messages: [ metadata ] });
   };
 
   self.get_all = function(callback) {
-    return callback(null, counters);
+    return callback(null, {
+      counters: counters,
+      messages: messages,
+    });
   };
 
   return self;

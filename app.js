@@ -2,8 +2,11 @@ var express = require('express');
 var express_ws = require('express-ws');
 var url = require('url');
 var groups = require('./groups');
-
+var morgan = require('morgan');
 var app = express();
+
+app.use(morgan('dev'));
+
 express_ws(app);
 
 app.ws('/subscribe', function(ws, req, res) {
@@ -46,6 +49,11 @@ app.ws('/subscribe', function(ws, req, res) {
         console.log('increment', key, 'by', value);
         group.increment(key, value);
       }
+    }
+
+    var message = message.message;
+    if (message) {
+      group.message(message);
     }
   });
 });
