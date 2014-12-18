@@ -3,9 +3,14 @@ var express_ws = require('express-ws');
 var url = require('url');
 var groups = require('./groups');
 var morgan = require('morgan');
+var body_parser = require('body-parser');
+
+var apn = require('./apn');
+
 var app = express();
 
 app.use(morgan('dev'));
+app.use(body_parser.json());
 
 express_ws(app);
 
@@ -63,6 +68,21 @@ app.ws('/subscribe', function(ws, req, res) {
       group.message(message);
     }
   });
+});
+
+app.post('/apn', function(req, res) {
+  console.log(req.body);
+
+  var query = url.parse(req.url, true).query;
+  var key = query.key;
+  var token = query.token;
+  
+  if (!token || !key) {
+    return res.send(400)
+  }
+
+  apn.register_token(key, token);
+  return res.send('ok');
 });
 
 var port = process.env.PORT || 5000;
