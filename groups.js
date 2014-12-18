@@ -7,6 +7,8 @@ module.exports = function(group_id) {
   }
 
   var self = Object.create(new process.EventEmitter());
+  self.setMaxListeners(1000);
+  
   groups[group_id] = self;
 
   var counters = {};

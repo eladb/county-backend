@@ -24,8 +24,7 @@ app.ws('/subscribe', function(ws, req, res) {
     ws.send(JSON.stringify(counters));
   });
 
-  // when the group updates, send the update to the client
-  group.on('update', function(update) {
+  function send_updates(update) {
     console.log('sending update', update);
     try {
       ws.send(JSON.stringify(update));
@@ -33,6 +32,14 @@ app.ws('/subscribe', function(ws, req, res) {
     catch (e) {
       console.log('socket closed');
     }
+  }
+
+  // when the group updates, send the update to the client
+  group.on('update', send_updates);
+
+  ws.on('close', function() {
+    console.log('websocket closed, cleaning up');
+    group.removeListener('update', send_updates);
   });
 
   ws.on('message', function(buff) {
