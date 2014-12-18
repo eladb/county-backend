@@ -1,5 +1,6 @@
 var groups = {};
 
+var apn = require('./apn');
 var redis_url = process.env.REDISCLOUD_URL || 'redis://localhost:6379';
 var redis_subscriber = require('redis-url').connect(redis_url);
 var redis_client = require('redis-url').connect(redis_url);
@@ -21,7 +22,6 @@ redis_subscriber.on('ready', function() {
 redis_subscriber.on('error', function(err) {
   console.error('cannot connect to redis at', redis_url, '-', err.stack);
 });
-
 
 module.exports = function(group_id) {
   var existing_group = groups[group_id];
@@ -62,7 +62,37 @@ module.exports = function(group_id) {
     var score = Date.now();
     redis_client.zadd(group_key('messages'), score, JSON.stringify(metadata));
     publish_to_group({ messages: [ metadata ] });
+    if (metadata.apn_alert) {
+      send_push({ alert: metadata.apn_alert });
+    }
   };
+
+  function send_push(notification) {
+    return get_all_members(function(err, members) {
+      if (err) {
+        console.error('cannot get members to send push:', err);
+        return;
+      }
+
+      members.forEach(function(user_key) {
+        apn.send_push(user_key, notification);
+      });
+    })
+  }
+
+  self.join = function(user_key, callback) {
+    callback = callback || function() {};
+    return redis_client.sadd(group_key('members'), user_key, callback);
+  };
+
+  self.leave = function(user_key, callback) {
+    callback = callback || function() {};
+    return redis_client.srem(group_key('members'), user_key, callback);
+  };
+
+  function get_all_members(callback) {
+    return redis_client.smembers(group_key('members'), callback);
+  }
 
   function get_all_counters(callback) {
     return redis_client.hgetall(group_key('counters'), function(err, counters) {
@@ -95,9 +125,13 @@ module.exports = function(group_id) {
       if (err) return callback(err);
       return get_all_messages(function(err, messages) {
         if (err) return callback(err);
-        return callback(null, {
-          counters: counters,
-          messages: messages,
+        return get_all_members(function(err, members) {
+          if (err) return callback(err);
+          return callback(null, {
+            counters: counters,
+            messages: messages,
+            members: members,
+          });
         });
       });
     });

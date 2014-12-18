@@ -63,9 +63,19 @@ app.ws('/subscribe', function(ws, req, res) {
       }
     }
 
-    var message = message.message;
-    if (message) {
-      group.message(message);
+    var message_metadata = message.message;
+    if (message_metadata) {
+      group.message(message_metadata);
+    }
+
+    var join = message.join;
+    if (join) {
+      group.join(join);
+    }
+
+    var leave = message.leave;
+    if (leave) {
+      group.leave(leave);
     }
   });
 });

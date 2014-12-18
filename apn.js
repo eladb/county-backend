@@ -26,6 +26,11 @@ exports.send_push = function(key, notification) {
       return;
     }
 
+    if (!token) {
+      console.error('no push token for key:', key)
+      return;
+    }
+
     var device = new apn.Device(token);
 
     var note = new apn.Notification();
