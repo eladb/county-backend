@@ -71,14 +71,10 @@ app.ws('/subscribe', function(ws, req, res) {
 });
 
 app.post('/apn', function(req, res) {
-  console.log(req.body);
-
-  var query = url.parse(req.url, true).query;
-  var key = query.key;
-  var token = query.token;
-  
+  var key = req.body.key;
+  var token = req.body.token;
   if (!token || !key) {
-    return res.send(400)
+    return res.sendStatus(400)
   }
 
   apn.register_token(key, token);
