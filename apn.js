@@ -1,7 +1,8 @@
 var path = require('path');
 var apn = require('apn');
-var redis_url = process.env.REDISCLOUD_URL || 'redis://localhost:6379';
-var redis = require('redis-url').connect(redis_url);
+var redis = require('./redis');
+var redis_client = redis.connect('apn');
+var badger = require('./badger');
 
 var prod_connection = new apn.Connection({
   cert: path.join('certs', 'apn-prod.cert.pem'),
@@ -16,11 +17,11 @@ var sandbox_connection = new apn.Connection({
 });
 
 exports.register_token = function(key, token) {
-  return redis.set('push:' + key, token);
+  return redis_client.set('push:' + key, token);
 };
 
 exports.send_push = function(key, notification) {
-  return redis.get('push:' + key, function(err, token) {
+  return redis_client.get('push:' + key, function(err, token) {
     if (err) {
       console.error('cannot send push to device with key', key, '-', err);
       return;
@@ -38,14 +39,19 @@ exports.send_push = function(key, notification) {
       note[key] = notification[key];
     });
 
-    // note.expiry = Math.floor(Date.now() / 1000) + 3600; // Expires 1 hour from now.
-    // note.badge = 3;
-    // note.sound = "ping.aiff";
-    // note.alert = "\uD83D\uDCE7 \u2709 You have a new message";
-    // note.payload = {'messageFrom': 'Caroline'};
+    // add badge count and send notification
+    return badger.total_badge_count(key, function(err, badge_count) {
+      if (err) {
+        console.warn('warning: cannot find badge count for user', key);
+        badge_count = '?';
+      }
+      else {
+        note.badge = badge_count;
+      }
 
-    console.log('sending push to', key, 'token', token, '-', notification);
-    sandbox_connection.pushNotification(note, device);
-    prod_connection.pushNotification(note, device);    
+      console.log('NOTIFY', key, JSON.stringify(notification), '(badge=' + badge_count + ')');
+      sandbox_connection.pushNotification(note, device);
+      prod_connection.pushNotification(note, device);    
+    });
   });
 };

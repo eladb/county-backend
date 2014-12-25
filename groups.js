@@ -1,16 +1,17 @@
 var groups = {};
 
 var apn = require('./apn');
-var redis_url = process.env.REDISCLOUD_URL || 'redis://localhost:6379';
-var redis_subscriber = require('redis-url').connect(redis_url);
-var redis_client = require('redis-url').connect(redis_url);
+var redis = require('./redis');
+
+var redis_subscriber = redis.connect('groups_subscriber');
+var redis_client = redis.connect('groups_client');
+
+var badger = require('./badger');
 
 redis_subscriber.on('ready', function() {
-  console.log('redis connected', redis_url);
   redis_subscriber.psubscribe('group:*');
   redis_subscriber.on('pmessage', function(pattern, channel, message) {
     var msg = JSON.parse(message);
-    console.log('received a message from channel', channel, '-', msg);
     var group_id = channel.split(':')[1];
     var group = groups[group_id];
     if (group) {
@@ -60,7 +61,17 @@ module.exports = function(group_id) {
   self.message = function(metadata) {
     metadata.timestamp = JSON.stringify(new Date()).replace(/\"/g, '');
     var score = Date.now();
-    redis_client.zadd(group_key('messages'), score, JSON.stringify(metadata));
+    redis_client.zadd(group_key('messages'), score, JSON.stringify(metadata), function(err) {
+      return get_message_count(function(err, message_count) {
+        if (err) {
+          console.error('error: cannot get message count for group', group_id, '--', err);
+          return;
+        }
+
+        badger.sync_group_count(group_id, message_count);
+      });
+    });
+
     publish_to_group({ messages: [ metadata ] });
   };
 
@@ -75,7 +86,7 @@ module.exports = function(group_id) {
         apn.send_push(user_key, notification);
       });
     });
-  }
+  };
 
   self.join = function(user_key, callback) {
     callback = callback || function() {};
@@ -86,6 +97,10 @@ module.exports = function(group_id) {
     callback = callback || function() {};
     return redis_client.srem(group_key('members'), user_key, callback);
   };
+
+  function get_message_count(callback) {
+    return redis_client.zcard(group_key('messages'), callback);
+  }
 
   function get_all_members(callback) {
     return redis_client.smembers(group_key('members'), callback);
