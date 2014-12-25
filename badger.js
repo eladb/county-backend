@@ -22,6 +22,11 @@ exports.group_badge_count = function(user_key, callback) {
     // sum all the deltas between group_count and client_counts
     var counts = {};
 
+    if (!count_per_group) {
+      // no groups
+      return callback(null, counts);
+    }
+
     return async.each(Object.keys(count_per_group), function(group_id, cb) {
       return redis_client.get(redis_group_key(group_id), function(err, group_count) {
         if (err) return cb(err);
