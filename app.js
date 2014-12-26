@@ -1,3 +1,4 @@
+var async = require('async');
 var express = require('express');
 var express_ws = require('express-ws');
 var url = require('url');
@@ -5,6 +6,8 @@ var groups = require('./groups');
 var morgan = require('morgan');
 var body_parser = require('body-parser');
 var badger = require('./badger');
+var users = require('./users');
+var util = require('./util');
 
 var apn = require('./apn');
 
@@ -13,22 +16,93 @@ var app = express();
 app.use(morgan('dev'));
 app.use(body_parser.json());
 
+app.use(function(req, res, next) {
+  res.callback = function(on_success) {
+    on_success = on_success || function(object) {
+      if (object) return res.send(object);
+      return res.send({ success: true });
+    };
+
+    return function(err, object) {
+      if (err) return res.error(err);
+      on_success(object);
+    };
+  };
+
+  return next();
+});
+
 express_ws(app);
 
 //
 // group management
 //
 
+// returns all groups+metadata for this user
 app.get('/groups', auth_user, function(req, res) {
-  return res.send('not implemented - returns all groups for this user');
+  return req.user.all_groups(function(err, ids) {
+    if (err) return res.send(err);
+
+    var result = {};
+    return async.each(ids, function(group_id, cb) {
+      var group = groups(group_id);
+      return group.metadata(function(err, metadata) {
+        if (err || !metadata) {
+          console.log('fake data. cannot find metadata for group', group_id);
+          return cb();
+        }
+
+        result[group_id] = metadata;
+        return cb();
+      });
+    }, function() {
+      return res.send(result);
+    });
+  });
 });
 
+// add a user as a member of a group and group to user group list
+app.post('/groups/:group_id/members', auth_user, function(req, res) {
+  var group_id = req.params.group_id;
+  var user_id = req.user_id;
+  return req.user.join_group(group_id, function(err) {
+    if (err) return res.error(err);
+    return groups(group_id).join(user_id, res.callback());
+  });
+});
+
+// remove group from user group list and user from group's member list
+app.delete('/groups/:group_id/members', auth_user, function(req, res) {
+  var group_id = req.params.group_id;
+  var user_id = req.user_id;
+  return req.user.leave_group(group_id, function(err) {
+    if (err) return callback(err);
+    return groups(group_id).leave(user_id, res.callback());
+  });
+});
+
+// creates a new group and joins the user to the group
 app.post('/groups', auth_user, function(req, res) {
-  return res.send('not implemented - create a new group');
+  var metadata = req.body;
+
+  // set creator and time based on authenticated user and server time
+  var group_id = metadata.group_id;
+  var user_id = req.user_id;
+
+  if (!group_id) return res.error(new Error('missing group_id'), 400);
+
+  metadata.group_id = group_id;
+  metadata.created_by = user_id;
+  metadata.created_at = util.json_date();
+  return groups(group_id).update(metadata, function(err) {
+    if (err) return res.error(err);
+    return req.user.join_group(group_id, res.callback());
+  });
 });
 
+// returns group metadata
 app.get('/groups/:group_id', auth_user, function(req, res) {
-  return res.send('not implemented - returns group details');
+  return groups(req.params.group_id).metadata(res.callback());
 });
 
 //
@@ -92,21 +166,6 @@ app.ws('/groups/connect', function(ws, req, res) {
     if (push) {
       group.push(message.push);
     }
-
-    var join = message.join;
-    if (join) {
-      group.join(join);
-    }
-
-    var leave = message.leave;
-    if (leave) {
-      group.leave(leave);
-    }
-
-    var sync_badge = message.sync_badge;
-    if (sync_badge) {
-      group.sync_badge(sync_badge.user_key, sync_badge.count);
-    }
   });
 });
 
@@ -115,24 +174,15 @@ app.ws('/groups/connect', function(ws, req, res) {
 //
 
 app.get('/badge/unread', auth_user, function(req, res) {
-  return badger.group_badge_count(req.user_id, function(err, count_per_group) {
-    if (err) return res.error(err)
-    return res.send(count_per_group);
-  });
+  return badger.group_badge_count(req.user_id, res.callback());
 });
 
 app.put('/badge/read', auth_user, function(req, res) {
   Object.keys(req.body).forEach(function(group_id) {
     badger.sync_user_count(group_id, req.user_id, req.body[group_id]);
   });
-
-  // return new badge count for group
-  return badger.total_badge_count(req.user_id, function(err, total_badge_count) {
-    if (err) return res.error(err);
-    return res.send({ unread: total_badge_count });
-  });
+  return res.send();
 });
-
 
 //
 // push notifications
@@ -159,8 +209,10 @@ function auth_user(req, res, next) {
   }
 
   req.user_id = user_id;
+  req.user = users(user_id);
+
   res.error = function(err, status) {
-    res.setStatus(status || 500);
+    res.status(status || 500);
     res.send({ error: err.message });
   };
 

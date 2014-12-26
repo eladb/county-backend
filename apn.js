@@ -1,7 +1,7 @@
 var path = require('path');
 var apn = require('apn');
 var redis = require('./redis');
-var redis_client = redis.connect('apn');
+var redis_client = redis.connect();
 var badger = require('./badger');
 
 var prod_connection = new apn.Connection({
@@ -21,6 +21,8 @@ exports.register_token = function(key, token) {
 };
 
 exports.send_push = function(key, notification) {
+  notification = notification || {};
+
   return redis_client.get('push:' + key, function(err, token) {
     if (err) {
       console.error('cannot send push to device with key', key, '-', err);

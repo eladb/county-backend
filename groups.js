@@ -2,9 +2,10 @@ var groups = {};
 
 var apn = require('./apn');
 var redis = require('./redis');
+var utils = require('./util');
 
-var redis_subscriber = redis.connect('groups_subscriber');
-var redis_client = redis.connect('groups_client');
+var redis_subscriber = redis.pubsub();
+var redis_client = redis.connect();
 
 var badger = require('./badger');
 
@@ -44,6 +45,19 @@ module.exports = function(group_id) {
     redis_client.publish(group_key(), JSON.stringify(obj));
   }
 
+  // get group metadata
+  self.metadata = function(callback) {
+    return redis_client.hgetall(group_key(), callback);
+  };
+
+  // update group metadata
+  self.update = function(metadata, callback) {
+    if (!metadata.title)      { return callback(new Error('missing `title`')); }
+    if (!metadata.created_by) { return callback(new Error('missing `created_by`')); }
+    if (!metadata.created_at) { return callback(new Error('missing `created_at`')); }
+    return redis_client.hmset(group_key(), metadata, callback);
+  };
+
   self.increment = function(key, increment) {
     return redis_client.hincrby(group_key('counters'), key, increment, function(err, current_value) {
       if (err) {
@@ -59,7 +73,7 @@ module.exports = function(group_id) {
   };
 
   self.message = function(metadata) {
-    metadata.timestamp = JSON.stringify(new Date()).replace(/\"/g, '');
+    metadata.timestamp = utils.json_date();
     var score = Date.now();
     redis_client.zadd(group_key('messages'), score, JSON.stringify(metadata), function(err) {
       return get_message_count(function(err, message_count) {
