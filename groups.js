@@ -47,7 +47,20 @@ module.exports = function(group_id) {
 
   // get group metadata
   self.metadata = function(callback) {
-    return redis_client.hgetall(group_key(), callback);
+    return redis_client.hgetall(group_key(), function(err, formatted_metadata) {
+      if (err) return callback(err);
+      if (!formatted_metadata) return callback(null, null);
+      var metadata = {};
+
+      // parse values from json to their javascript friends
+      Object.keys(formatted_metadata).forEach(function(key) {
+        var parsed;
+        try { metadata[key] = JSON.parse(formatted_metadata[key]) }
+        catch (e) { metadata[key] = formatted_metadata[key] } // skip parse
+      });
+
+      return callback(null, metadata);
+    });
   };
 
   // update group metadata
@@ -55,7 +68,15 @@ module.exports = function(group_id) {
     if (!metadata.title)      { return callback(new Error('missing `title`')); }
     if (!metadata.created_by) { return callback(new Error('missing `created_by`')); }
     if (!metadata.created_at) { return callback(new Error('missing `created_at`')); }
-    return redis_client.hmset(group_key(), metadata, callback);
+
+    // stringify each value to json so we preserve type and support complex objects
+    // would have been nice if the redis library would do this by default
+    var formatted_metadata = {};
+    Object.keys(metadata).forEach(function(key) {
+      formatted_metadata[key] = JSON.stringify(metadata[key]);
+    });
+
+    return redis_client.hmset(group_key(), formatted_metadata, callback);
   };
 
   self.increment = function(key, increment) {
