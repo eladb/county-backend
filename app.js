@@ -67,7 +67,9 @@ app.post('/groups/:group_id/members', auth_user, function(req, res) {
   var user_id = req.user_id;
   return req.user.join_group(group_id, function(err) {
     if (err) return res.error(err);
-    return groups(group_id).join(user_id, res.callback());
+    return groups(group_id).join(user_id, res.callback(function() {
+      return res.send({ joined: group_id });
+    }));
   });
 });
 
@@ -96,7 +98,9 @@ app.post('/groups', auth_user, function(req, res) {
   metadata.created_at = util.json_date();
   return groups(group_id).update(metadata, function(err) {
     if (err) return res.error(err);
-    return req.user.join_group(group_id, res.callback());
+    return req.user.join_group(group_id, res.callback(function() {
+      return res.send({ created: group_id });
+    }));
   });
 });
 
