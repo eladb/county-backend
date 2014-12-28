@@ -79,7 +79,9 @@ app.delete('/groups/:group_id/members', auth_user, function(req, res) {
   var user_id = req.user_id;
   return req.user.leave_group(group_id, function(err) {
     if (err) return callback(err);
-    return groups(group_id).leave(user_id, res.callback());
+    return groups(group_id).leave(user_id, res.callback(function() {
+      return res.send({ left: group_id });
+    });
   });
 });
 
