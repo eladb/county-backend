@@ -65,9 +65,7 @@ module.exports = function(group_id) {
 
   // update group metadata
   self.update = function(metadata, callback) {
-    if (!metadata.title)      { return callback(new Error('missing `title`')); }
-    if (!metadata.created_by) { return callback(new Error('missing `created_by`')); }
-    if (!metadata.created_at) { return callback(new Error('missing `created_at`')); }
+    callback = callback || function() { };
 
     // stringify each value to json so we preserve type and support complex objects
     // would have been nice if the redis library would do this by default
@@ -108,6 +106,10 @@ module.exports = function(group_id) {
     });
 
     publish_to_group({ messages: [ metadata ] });
+
+    // update last-message in group metadata, so we can sort
+    // messages based on last message and show the text
+    self.update({ last_message: metadata });
   };
 
   self.push = function(notification) {
