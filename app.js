@@ -147,6 +147,10 @@ app.ws('/groups/connect', function(ws, req, res) {
     group.removeListener('update', send_updates);
   });
 
+  ws.on('error', function(err) {
+    console.log('websocket error:', err);
+  });
+
   ws.on('message', function(buff) {
     var message = JSON.parse(buff);
     console.log('GROUP [' + group_id + ']', JSON.stringify(message));
