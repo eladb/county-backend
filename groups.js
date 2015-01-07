@@ -91,6 +91,37 @@ module.exports = function(group_id) {
     });
   };
 
+  self.message_scorers = function(user, key, score) {
+    // key = message_id
+    return redis_client.hget(group_key("message_scorers"), key, function(err, message_scorers) {
+      if (err) {
+        console.error('hget error:', err);
+        return;
+      }
+
+      message_scorers = message_scorers ? JSON.parse(message_scorers) : {}
+
+      message_scorers[user] = score;
+
+      return redis_client.hset(group_key("message_scorers"), key, JSON.stringify(message_scorers), function(err) {
+        if (err) {
+          console.error('hset error:', err);
+          return;
+        }
+
+        // notify all subscribers
+        // var message_scorers = {};
+        // message_scorers[user] = score;
+        var messages = {};
+        messages[key] = message_scorers;
+        publish_to_group({ message_scorers: messages });
+      });
+
+    })
+    
+  };
+
+
   self.message = function(metadata) {
     metadata.timestamp = utils.json_date();
     var score = Date.now();
@@ -143,6 +174,25 @@ module.exports = function(group_id) {
     return redis_client.smembers(group_key('members'), callback);
   }
 
+  function get_all_message_scorers(callback) {
+    return redis_client.hgetall(group_key("message_scorers"), function(err, message_scorers) {
+      if (err) {
+        console.error('hgetall error:',err);
+        return callback(null,null);
+      }
+
+      if (!message_scorers) return callback(null, {});
+
+      Object.keys(message_scorers).forEach(function(key) {
+        var parsed;
+        try { message_scorers[key] = JSON.parse(message_scorers[key]) }
+        catch (e) { message_scorers[key] = message_scorers[key] } // skip parse
+      });
+
+      callback(null, message_scorers);
+    });
+  }
+
   function get_all_counters(callback) {
     return redis_client.hgetall(group_key('counters'), function(err, counters) {
       if (err) {
@@ -176,11 +226,14 @@ module.exports = function(group_id) {
         if (err) return callback(err);
         return get_all_members(function(err, members) {
           if (err) return callback(err);
-          return callback(null, {
+          return get_all_message_scorers(function(err, message_scorers) {
+            return callback(null, {
             counters: counters,
             messages: messages,
             members: members,
-          });
+            message_scorers: message_scorers,
+            });
+          })
         });
       });
     });

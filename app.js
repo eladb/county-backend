@@ -167,6 +167,15 @@ app.ws('/groups/connect', function(ws, req, res) {
       }
     }
 
+    var message_scorers = message.message_scorers;
+    if (message_scorers) {
+      for (var key in message_scorers) {
+        var dictionary = message_scorers[key];
+        console.log('user', dictionary.user, 'scored message', dictionary.message,'with', dictionary.score);
+        group.message_scorers(dictionary.user, dictionary.message, dictionary.score);
+      }
+    }
+
     var message_metadata = message.message;
     if (message_metadata) {
       group.message(message_metadata);
